@@ -102,7 +102,7 @@ jobs:
           </manifest>
           EOF
           
-          # Create Java Source Code
+          # Create Java Source Code with the Clickable Fix Pre-Baked
           cat << 'EOF' > app/src/main/java/com/extradim/tile/ExtraDimTileService.java
           package com.extradim.tile;
           
@@ -124,13 +124,23 @@ jobs:
               public void onClick() {
                   super.onClick();
                   try {
-                      // Read current state and flip it
-                      int currentState = Settings.Secure.getInt(getContentResolver(), EXTRA_DIM_KEY, 0);
+                      int currentState = 0;
+                      try {
+                          currentState = Settings.Secure.getInt(getContentResolver(), EXTRA_DIM_KEY, 0);
+                      } catch (Exception e) {
+                          Log.w("ExtraDimTile", "Could not read state, attempting write anyway");
+                      }
+                      
                       int newState = (currentState == 1) ? 0 : 1;
                       Settings.Secure.putInt(getContentResolver(), EXTRA_DIM_KEY, newState);
-                      updateTileState();
+                      
+                      Tile tile = getQsTile();
+                      if (tile != null) {
+                          tile.setState(newState == 1 ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
+                          tile.updateTile();
+                      }
                   } catch (Exception e) {
-                      Log.e("ExtraDimTile", "Permission denied. Run ADB command to grant WRITE_SECURE_SETTINGS", e);
+                      Log.e("ExtraDimTile", "Write failed. Ensure WRITE_SECURE_SETTINGS is granted.", e);
                   }
               }
               
@@ -140,11 +150,11 @@ jobs:
                       try {
                           int currentState = Settings.Secure.getInt(getContentResolver(), EXTRA_DIM_KEY, 0);
                           tile.setState(currentState == 1 ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE);
-                          tile.updateTile();
                       } catch (Exception e) {
-                          tile.setState(Tile.STATE_UNAVAILABLE);
-                          tile.updateTile();
+                          // FORCE CLICKABLE: Keeps tile intact even if background checks are restricted initially
+                          tile.setState(Tile.STATE_INACTIVE);
                       }
+                      tile.updateTile();
                   }
               }
           }
